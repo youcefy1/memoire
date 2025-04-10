@@ -2,6 +2,7 @@ import express, { Request, Response } from "express";
 import axios from "axios";
 import Book, { IBook } from "../models/Book"; // Ensure you have this Mongoose model defined
 import User from "../models/User";
+import { authMiddleware } from "../middleware/auth";
 
 const router = express.Router();
 
@@ -110,7 +111,7 @@ router.get("/:id", async (req: any, res: any) => {
   }
 });
 
-router.post("/favorites", async (req: any, res: any) => {
+router.post("/favorites", authMiddleware, async (req: any, res: any) => {
   const { userId, bookId } = req.body;
   const user = await User.findById(userId);
 
@@ -126,18 +127,57 @@ router.post("/favorites", async (req: any, res: any) => {
   res.json({ success: true, favorites: user.favorites });
 });
 
-router.post("/borrow", async (req: any, res: any) => {
+router.post("/borrow", authMiddleware, async (req: any, res: any) => {
   const { userId, bookId, returnDate } = req.body;
-  const user = await User.findById(userId);
 
-  if (!user) {
-    return res.status(404).json({ success: false, message: "User not found" });
+  try {
+    console.log("Borrow request:", { userId, bookId, returnDate }); // Debug log
+
+    const user = await User.findById(userId);
+    if (!user) {
+      return res
+        .status(404)
+        .json({ success: false, message: "User not found" });
+    }
+
+    const book = await Book.findOne({ _id: bookId });
+    if (!book) {
+      return res
+        .status(404)
+        .json({ success: false, message: "Book not found" });
+    }
+
+    if (!book.available) {
+      return res
+        .status(400)
+        .json({ success: false, message: "Book is not available" });
+    }
+
+    // Update book availability
+    book.available = false;
+    await book.save();
+
+    // Add to user's borrowed books
+    const borrowedBook = {
+      book: bookId,
+      returnDate: new Date(returnDate),
+    };
+
+    user.borrowedBooks.push(borrowedBook);
+    await user.save();
+
+    res.json({
+      success: true,
+      borrowedBooks: user.borrowedBooks,
+      message: "Book borrowed successfully",
+    });
+  } catch (error) {
+    console.error("Borrow error:", error); // Debug log
+    res.status(500).json({
+      success: false,
+      message: error instanceof Error ? error.message : "Server error",
+    });
   }
-
-  user.borrowedBooks.push({ book: bookId, returnDate });
-  await user.save();
-
-  res.json({ success: true, borrowedBooks: user.borrowedBooks });
 });
 
 router.get("/user/:id", async (req: any, res: any) => {

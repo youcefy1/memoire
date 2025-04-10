@@ -9,7 +9,7 @@ export default function ProtectedPage({ children }: { children: React.ReactNode 
   useEffect(() => {
     const token = localStorage.getItem("token"); // Get token from local storage
     if (!token) {
-      router.push("/login");
+      router.push("/auth/login");
     } else {
       setIsAuthenticated(true);
     }
